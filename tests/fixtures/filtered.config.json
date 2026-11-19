@@ -1,0 +1,8 @@
+{
+  "package": "A",
+  "repository": "tests/fixtures/diamond.json",
+  "test_mode": true,
+  "version": "1",
+  "output_file": "filtered.png",
+  "filter_substring": "B"
+}

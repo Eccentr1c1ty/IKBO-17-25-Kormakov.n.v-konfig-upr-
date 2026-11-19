@@ -1,9 +1,13 @@
+import argparse
+from functools import partial
 import json
 import re
 from pathlib import Path
 from urllib.parse import urlsplit
 import xml.etree.ElementTree as ET
 from urllib.request import urlopen
+
+from src.graph import read_test_graph, traverse
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 CONFIG_FILE = PROJECT_DIR / "config.json"
@@ -94,36 +98,68 @@ def load_dependencies(repository, package, version):
         return parse_dependencies(response.read())
 
 
-def main():
-    """Прочитать настройки и вывести прямые зависимости."""
-    try:
-        config = json.loads(CONFIG_FILE.read_text(encoding="utf-8-sig"))
-        validate_config(config)
-    except (OSError, ValueError) as error:
-        print(f"Ошибка конфигурации: {error}")
-        return 1
+def maven_neighbors(repository, node):
+    """Получить зависимости compile/runtime выбранного пакета."""
+    package, version = node.rsplit(":", 1)
+    for group, artifact, release, scope in load_dependencies(
+        repository, package, version
+    ):
+        if scope in {"compile", "runtime"}:
+            if not release or "${" in release:
+                package_id = f"{group}:{artifact}"
+                raise ValueError(f"Не определена версия {package_id}")
+            yield f"{group}:{artifact}:{release}"
 
+
+def build_graph(config):
+    """Выбрать источник данных и построить граф."""
+    package = config["package"]
+    repository = config["repository"]
     if config["test_mode"]:
-        print("Тестовый граф будет добавлен на этапе 3.")
-        return 1
+        source = read_test_graph(PROJECT_DIR / repository)
+        if package not in source:
+            raise ValueError(f"Тестовый пакет {package} не найден.")
+        root = package
+        neighbors = source.__getitem__
+    else:
+        root = f"{package}:{config['version']}"
+        neighbors = partial(maven_neighbors, repository)
 
+    def excluded(node):
+        """Сравнить подстроку с именем пакета без версии."""
+        fragment = config["filter_substring"]
+        name = node if config["test_mode"] else node.rsplit(":", 1)[0]
+        return bool(fragment) and fragment in name
+
+    return traverse(root, neighbors, excluded)
+
+
+def show_graph(graph, cycles):
+    """Показать список смежности и обнаруженные циклы."""
+    for node, targets in graph.items():
+        print(f"{node} -> {', '.join(targets) or '—'}")
+    for node, target in cycles:
+        print(f"Цикл: ребро {node} -> {target} замыкает путь DFS")
+    if not graph:
+        print("Граф пуст: начальный пакет исключён фильтром.")
+
+
+def main():
+    """Прочитать конфигурацию и выполнить анализ."""
+    parser = argparse.ArgumentParser(description=main.__doc__)
+    parser.add_argument("config", nargs="?", type=Path, default=CONFIG_FILE)
+    args = parser.parse_args()
     try:
-        dependencies = load_dependencies(
-            config["repository"], config["package"], config["version"]
-        )
+        config = json.loads(args.config.read_text(encoding="utf-8-sig"))
+        validate_config(config)
+        graph, _, cycles = build_graph(config)
+        show_graph(graph, cycles)
     except (OSError, ValueError, ET.ParseError) as error:
-        print(f"Ошибка чтения POM: {error}")
+        print(f"Ошибка: {error}")
         return 1
-
-    print(f"Прямые зависимости {config['package']}:{config['version']}")
-    for group, artifact, version, scope in dependencies:
-        version_label = version or "версия не указана в POM"
-        print(f"{group}:{artifact}:{version_label} ({scope})")
-
-    if not dependencies:
-        print("Прямых зависимостей нет.")
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

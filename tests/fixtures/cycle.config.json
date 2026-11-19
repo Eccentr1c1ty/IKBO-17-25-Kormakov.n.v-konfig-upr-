@@ -1,0 +1,8 @@
+{
+  "package": "A",
+  "repository": "tests/fixtures/cycle.json",
+  "test_mode": true,
+  "version": "1",
+  "output_file": "cycle.png",
+  "filter_substring": ""
+}
