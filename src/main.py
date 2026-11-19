@@ -2,6 +2,8 @@ import json
 import re
 from pathlib import Path
 from urllib.parse import urlsplit
+import xml.etree.ElementTree as ET
+from urllib.request import urlopen
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 CONFIG_FILE = PROJECT_DIR / "config.json"
@@ -56,8 +58,44 @@ def validate_config(config):
         raise ValueError("filter_substring: укажи строку, можно пустую")
 
 
+def parse_dependencies(xml_data):
+    """Прочитать прямые зависимости из POM."""
+    root = ET.fromstring(xml_data)
+    namespace = root.tag.partition("}")[0] + "}" if "}" in root.tag else ""
+    properties = {
+        item.tag.removeprefix(namespace): (item.text or "").strip()
+        for item in root.findall(f"{namespace}properties/*")
+    }
+
+    dependencies = []
+    for item in root.findall(f"{namespace}dependencies/{namespace}dependency"):
+        group = item.findtext(f"{namespace}groupId", "").strip()
+        artifact = item.findtext(f"{namespace}artifactId", "").strip()
+        version = item.findtext(f"{namespace}version", "").strip()
+        scope = item.findtext(f"{namespace}scope", "compile").strip()
+        version = re.sub(
+            r"\$\{([^}]+)\}",
+            lambda match: properties.get(match[1], match[0]),
+            version,
+        )
+        dependencies.append((group, artifact, version, scope))
+    return dependencies
+
+
+def load_dependencies(repository, package, version):
+    """Скачать POM по координатам и версии пакета."""
+    group, artifact = package.split(":")
+    group_path = group.replace(".", "/")
+    filename = f"{artifact}-{version}.pom"
+    path = f"{group_path}/{artifact}/{version}/{filename}"
+    url = f"{repository.rstrip('/')}/{path}"
+
+    with urlopen(url, timeout=10) as response:
+        return parse_dependencies(response.read())
+
+
 def main():
-    """Прочитать конфигурацию и напечатать её настройки."""
+    """Прочитать настройки и вывести прямые зависимости."""
     try:
         config = json.loads(CONFIG_FILE.read_text(encoding="utf-8-sig"))
         validate_config(config)
@@ -65,11 +103,25 @@ def main():
         print(f"Ошибка конфигурации: {error}")
         return 1
 
-    for key in (
-        "package", "repository", "test_mode", "version",
-        "output_file", "filter_substring",
-    ):
-        print(f"{key}={config[key]}")
+    if config["test_mode"]:
+        print("Тестовый граф будет добавлен на этапе 3.")
+        return 1
+
+    try:
+        dependencies = load_dependencies(
+            config["repository"], config["package"], config["version"]
+        )
+    except (OSError, ValueError, ET.ParseError) as error:
+        print(f"Ошибка чтения POM: {error}")
+        return 1
+
+    print(f"Прямые зависимости {config['package']}:{config['version']}")
+    for group, artifact, version, scope in dependencies:
+        version_label = version or "версия не указана в POM"
+        print(f"{group}:{artifact}:{version_label} ({scope})")
+
+    if not dependencies:
+        print("Прямых зависимостей нет.")
     return 0
 
 
