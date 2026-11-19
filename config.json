@@ -3,6 +3,6 @@
   "repository": "https://repo.maven.apache.org/maven2/",
   "test_mode": false,
   "version": "4.13.2",
-  "output_file": "dependencies.png",
+  "output_file": "junit.png",
   "filter_substring": ""
 }

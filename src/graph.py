@@ -14,7 +14,9 @@ def read_test_graph(path):
             raise ValueError(f"Некорректное описание узла {name!r}.")
         for target in targets:
             if not valid_name(target) or target not in graph:
-                raise ValueError(f"Неизвестная зависимость {target!r} у {name}.")
+                raise ValueError(
+                    f"Неизвестная зависимость {target!r} у {name}."
+                )
     return graph
 
 

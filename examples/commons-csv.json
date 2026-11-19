@@ -1,0 +1,8 @@
+{
+  "package": "org.apache.commons:commons-csv",
+  "version": "1.10.0",
+  "repository": "https://repo.maven.apache.org/maven2/",
+  "test_mode": false,
+  "output_file": "commons-csv.png",
+  "filter_substring": ""
+}
