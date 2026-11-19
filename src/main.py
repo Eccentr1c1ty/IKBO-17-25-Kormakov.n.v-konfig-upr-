@@ -144,6 +144,18 @@ def show_graph(graph, cycles):
         print("Граф пуст: начальный пакет исключён фильтром.")
 
 
+def show_order(finished, cycles):
+    """Показать порядок с зависимостями перед использующими их пакетами."""
+    if cycles:
+        print("Порядок загрузки невозможен: обнаружен цикл.")
+        return 1
+    if finished:
+        print("Порядок загрузки:")
+        for index, node in enumerate(finished, start=1):
+            print(f"{index}. {node}")
+    return 0
+
+
 def main():
     """Прочитать конфигурацию и выполнить анализ."""
     parser = argparse.ArgumentParser(description=main.__doc__)
@@ -152,12 +164,12 @@ def main():
     try:
         config = json.loads(args.config.read_text(encoding="utf-8-sig"))
         validate_config(config)
-        graph, _, cycles = build_graph(config)
+        graph, finished, cycles = build_graph(config)
         show_graph(graph, cycles)
+        return show_order(finished, cycles)
     except (OSError, ValueError, ET.ParseError) as error:
         print(f"Ошибка: {error}")
         return 1
-    return 0
 
 
 if __name__ == "__main__":
