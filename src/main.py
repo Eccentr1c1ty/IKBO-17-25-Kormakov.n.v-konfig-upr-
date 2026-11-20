@@ -4,7 +4,7 @@ import json
 import re
 from pathlib import Path
 from urllib.parse import urlsplit
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as element_tree
 from urllib.request import urlopen
 
 from src.graph import read_test_graph, traverse
@@ -29,6 +29,15 @@ def validate_repository(repository, test_mode):
         raise ValueError("repository: укажи корректный HTTP(S)-адрес")
 
 
+def validate_package(package, test_mode):
+    """Проверить имя пакета для выбранного режима."""
+    package_pattern = r"[A-Z]+" if test_mode else r"[\w.-]+:[\w.-]+"
+    if not isinstance(package, str) or not re.fullmatch(
+        package_pattern, package
+    ):
+        raise ValueError("package: укажи A–Z или groupId:artifactId по режиму")
+
+
 def validate_config(config):
     """Проверить шесть параметров конфигурации."""
     if not isinstance(config, dict):
@@ -38,13 +47,7 @@ def validate_config(config):
     if not isinstance(test_mode, bool):
         raise ValueError("test_mode: укажи true или false")
 
-    package_pattern = r"[A-Z]+" if test_mode else r"[\w.-]+:[\w.-]+"
-    package = config.get("package")
-    if not isinstance(package, str) or not re.fullmatch(
-        package_pattern, package
-    ):
-        raise ValueError("package: укажи A–Z или groupId:artifactId по режиму")
-
+    validate_package(config.get("package"), test_mode)
     validate_repository(config.get("repository"), test_mode)
 
     version = config.get("version")
@@ -65,7 +68,7 @@ def validate_config(config):
 
 def parse_dependencies(xml_data):
     """Прочитать прямые зависимости из POM."""
-    root = ET.fromstring(xml_data)
+    root = element_tree.fromstring(xml_data)
     namespace = root.tag.partition("}")[0] + "}" if "}" in root.tag else ""
     properties = {
         item.tag.removeprefix(namespace): (item.text or "").strip()
@@ -159,7 +162,7 @@ def main():
         mmd_path = save_diagram(graph, png_path)
         print(f"Mermaid: {mmd_path}")
         print(f"PNG: {png_path}")
-    except (OSError, ValueError, ET.ParseError) as error:
+    except (OSError, ValueError, element_tree.ParseError) as error:
         print(f"Ошибка: {error}")
         return 1
     return 0
